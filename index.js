@@ -11,8 +11,14 @@ app.get('/unshorten', async (req, res) => {
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-    await page.goto(url, { timeout: 15000 });
+    const context = await browser.newContext({
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+  viewport: { width: 1280, height: 720 }
+});
+const page = await context.newPage();
+
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
     const finalUrl = page.url();
     await browser.close();
     return res.json({ finalUrl });
