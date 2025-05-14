@@ -1,31 +1,40 @@
 import express from 'express';
-import { chromium } from 'playwright';
+import fetch from 'node-fetch';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN;
 
 app.get('/unshorten', async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
 
-  let browser;
+  const browserlessUrl = `https://chrome.browserless.io/playwright/function?token=${BROWSERLESS_TOKEN}`;
+
+  const payload = {
+    code: "module.exports = async ({ playwright, url }) => { const browser = await playwright.chromium.launch(); const page = await browser.newPage(); await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 }); const finalUrl = page.url(); await browser.close(); return { finalUrl }; };",
+    context: { url }
+  };
+
   try {
-    browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({
-  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-  viewport: { width: 1280, height: 720 }
-});
-const page = await context.newPage();
+    const response = await fetch(browserlessUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const data = await response.json();
 
-    const finalUrl = page.url();
-    await browser.close();
-    return res.json({ finalUrl });
+    if (data.finalUrl) {
+      res.json({ finalUrl: data.finalUrl });
+    } else {
+      res.status(500).json({ error: 'Browserless returned error', details: data });
+    }
   } catch (err) {
-    if (browser) await browser.close();
-    return res.status(500).json({ error: 'Failed to resolve URL', details: err.message });
+    res.status(500).json({ error: 'Request failed', details: err.message });
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Proxy running on port ${PORT}`);
+});
